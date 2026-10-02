@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STAR CATCHER</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #050014;
+    color: white;
+    font-family: "Courier New", monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.game-wrapper {
+    text-align: center;
+}
+
+h1 {
+    margin: 0 0 5px;
+    font-size: 38px;
+    letter-spacing: 5px;
+    color: #00ffff;
+    text-shadow:
+        0 0 5px #00ffff,
+        0 0 15px #00ffff,
+        4px 4px 0 #ff00ff;
+}
+
+.subtitle {
+    color: #ffff00;
+    margin-bottom: 12px;
+    font-size: 14px;
+    text-shadow: 0 0 10px #ffff00;
+}
+
+canvas {
+    display: block;
+    width: min(92vw, 700px);
+    height: min(72vh, 600px);
+
+    background: #05001a;
+
+    border: 5px solid #00ffff;
+
+    box-shadow:
+        0 0 10px #00ffff,
+        0 0 25px #00ffff,
+        0 0 50px #ff00ff;
+
+    image-rendering: pixelated;
+}
+
+.controls {
+    margin-top: 12px;
+    font-size: 14px;
+    color: white;
+}
+
+.controls span {
+    color: #00ffff;
+    font-weight: bold;
+}
+
+button {
+    margin-top: 12px;
+    padding: 11px 25px;
+
+    background: #ff00ff;
+    color: white;
+
+    border: 3px solid white;
+
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 0 10px #ff00ff,
+        5px 5px 0 #00ffff;
+}
+
+button:hover {
+    background: #00ffff;
+    color: #050014;
+
+    box-shadow:
+        0 0 15px #00ffff,
+        5px 5px 0 #ffff00;
+}
+</style>
+</head>
+
+<body>
+
+<div class="game-wrapper">
+
+    <h1>STAR CATCHER</h1>
+
+    <div class="subtitle">
+        ★ ★ ★ RETRO ARCADE ★ ★ ★
+    </div>
+
+    <canvas id="game"></canvas>
+
+    <div class="controls">
+        <span>← →</span> MOVE
+        &nbsp; | &nbsp;
+        <span>SPACE</span> START
+        &nbsp; | &nbsp;
+        <span>★ = +10 POINTS</span>
+    </div>
+
+    <button onclick="restartGame()">
+        RESTART GAME
+    </button>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 700;
+canvas.height = 600;
+
+let keys = {};
+
+let score = 0;
+let highScore =
+    Number(localStorage.getItem("starHighScore")) || 0;
+
+let lives = 3;
+
+let gameRunning = false;
+let gameOver = false;
+
+let spawnTimer = 0;
+let difficulty = 1;
+
+let objects = [];
+let particles = [];
+let floatingPoints = [];
+
+
+// ---------------------------
+// PLAYER
+// ---------------------------
+
+const player = {
+
+    x: canvas.width / 2 - 35,
+
+    y: canvas.height - 70,
+
+    width: 70,
+
+    height: 35,
+
+    speed: 8
+};
+
+
+// ---------------------------
+// INPUT
+// ---------------------------
+
+document.addEventListener("keydown", e => {
+
+    keys[e.key] = true;
+
+    if (e.code === "Space") {
+
+        e.preventDefault();
+
+        if (!gameRunning || gameOver) {
+
+            restartGame();
+
+        }
+
+    }
+
+});
+
+document.addEventListener("keyup", e => {
+
+    keys[e.key] = false;
+
+});
+
+
+// ---------------------------
+// SPAWN
+// ---------------------------
+
+function spawnObject() {
+
+    const isBomb = Math.random() < 0.17;
+
+    objects.push({
+
+        x: Math.random() *
+            (canvas.width - 30),
+
+        y: -30,
+
+        size: 28,
+
+        speed:
+            2.5 +
+            Math.random() * 2 +
+            difficulty * 0.35,
+
+        type:
+            isBomb
+                ? "bomb"
+                : "star",
+
+        rotation:
+            Math.random() *
+            Math.PI
+
+    });
+
+}
+
+
+// ---------------------------
+// PARTICLES
+// ---------------------------
+
+function createParticles(x, y, color) {
+
+    for (let i = 0; i < 18; i++) {
+
+        particles.push({
+
+            x: x,
+
+            y: y,
+
+            vx:
+                (Math.random() - 0.5) *
+                8,
+
+            vy:
+                (Math.random() - 0.5) *
+                8,
+
+            life: 35,
+
+            color: color
+
+        });
+
+    }
+
+}
+
+
+function updateParticles() {
+
+    particles.forEach(p => {
+
+        p.x += p.vx;
+
+        p.y += p.vy;
+
+        p.life--;
+
+    });
+
+    particles =
+        particles.filter(
+            p => p.life > 0
+        );
+
+}
+
+
+function drawParticles() {
+
+    particles.forEach(p => {
+
+        ctx.globalAlpha =
+            p.life / 35;
+
+        ctx.fillStyle =
+            p.color;
+
+        ctx.shadowColor =
+            p.color;
+
+        ctx.shadowBlur = 10;
+
+        ctx.fillRect(
+            Math.floor(p.x),
+            Math.floor(p.y),
+            5,
+            5
+        );
+
+    });
+
+    ctx.globalAlpha = 1;
+
+    ctx.shadowBlur = 0;
+
+}
+
+
+// ---------------------------
+// FLOATING +10
+// ---------------------------
+
+function addFloatingPoints(x, y) {
+
+    floatingPoints.push({
+
+        x: x,
+
+        y: y,
+
+        life: 50
+
+    });
+
+}
+
+
+function updateFloatingPoints() {
+
+    floatingPoints.forEach(p => {
+
+        p.y -= 1.5;
+
+        p.life--;
+
+    });
+
+    floatingPoints =
+        floatingPoints.filter(
+            p => p.life > 0
+        );
+
+}
+
+
+function drawFloatingPoints() {
+
+    floatingPoints.forEach(p => {
+
+        ctx.globalAlpha =
+            p.life / 50;
+
+        ctx.font =
+            "bold 22px Courier New";
+
+        ctx.fillStyle =
+            "#ffff00";
+
+        ctx.shadowColor =
+            "#ffff00";
+
+        ctx.shadowBlur = 15;
+
+        ctx.fillText(
+            "+10!",
+            p.x,
+            p.y
+        );
+
+    });
+
+    ctx.globalAlpha = 1;
+
+    ctx.shadowBlur = 0;
+
+}
+
+
+// ---------------------------
+// COLLISION
+// ---------------------------
+
+function collision(a, b) {
+
+    return (
+
+        a.x <
+        b.x + b.size &&
+
+        a.x + a.width >
+        b.x &&
+
+        a.y <
+        b.y + b.size &&
+
+        a.y + a.height >
+        b.y
+
+    );
+
+}
+
+
+// ---------------------------
+// UPDATE GAME
+// ---------------------------
+
+function update() {
+
+    if (!gameRunning || gameOver)
+        return;
+
+
+    // Movement
+
+    if (
+        keys["ArrowLeft"] ||
+        keys["a"]
+    ) {
+
+        player.x -=
+            player.speed;
+
+    }
+
+
+    if (
+        keys["ArrowRight"] ||
+        keys["d"]
+    ) {
+
+        player.x +=
+            player.speed;
+
+    }
+
+
+    player.x =
+        Math.max(
+            0,
+            Math.min(
+                canvas.width -
+                player.width,
+                player.x
+            )
+        );
+
+
+    // Spawn
+
+    spawnTimer--;
+
+    if (spawnTimer <= 0) {
+
+        spawnObject();
+
+        spawnTimer =
+            Math.max(
+                16,
+                48 -
+                difficulty * 3
+            );
+
+    }
+
+
+    // Difficulty
+
+    difficulty =
+        1 +
+        Math.floor(score / 100);
+
+
+    // Objects
+
+    objects.forEach(obj => {
+
+        obj.y += obj.speed;
+
+        obj.rotation += 0.06;
+
+
+        if (collision(player, obj)) {
+
+
+            // STAR
+
+            if (obj.type === "star") {
+
+                score += 10;
+
+
+                if (
+                    score >
+                    highScore
+                ) {
+
+                    highScore =
+                        score;
+
+                    localStorage.setItem(
+                        "starHighScore",
+                        highScore
+                    );
+
+                }
+
+
+                createParticles(
+                    obj.x +
+                    obj.size / 2,
+
+                    obj.y +
+                    obj.size / 2,
+
+                    "#ffff00"
+                );
+
+
+                addFloatingPoints(
+                    obj.x,
+                    obj.y
+                );
+
+            }
+
+
+            // BOMB
+
+            else {
+
+                lives--;
+
+                createParticles(
+                    obj.x +
+                    obj.size / 2,
+
+                    obj.y +
+                    obj.size / 2,
+
+                    "#ff0044"
+                );
+
+
+                if (lives <= 0) {
+
+                    gameOver = true;
+
+                }
+
+            }
+
+
+            obj.y =
+                canvas.height +
+                100;
+
+        }
+
+    });
+
+
+    objects =
+        objects.filter(
+            obj =>
+                obj.y <
+                canvas.height + 50
+        );
+
+
+    updateParticles();
+
+    updateFloatingPoints();
+
+}
+
+
+// ---------------------------
+// BACKGROUND
+// ---------------------------
+
+function drawBackground() {
+
+    ctx.fillStyle =
+        "#05001a";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // Bright stars
+
+    for (let i = 0; i < 100; i++) {
+
+        const x =
+            (i * 97) %
+            canvas.width;
+
+        const y =
+            (i * 53) %
+            canvas.height;
+
+        const size =
+            i % 5 === 0
+                ? 3
+                : 1.5;
+
+
+        ctx.fillStyle =
+            i % 4 === 0
+                ? "#00ffff"
+                : i % 4 === 1
+                    ? "#ff00ff"
+                    : "#ffffff";
+
+
+        ctx.shadowColor =
+            ctx.fillStyle;
+
+        ctx.shadowBlur = 8;
+
+
+        ctx.fillRect(
+            x,
+            y,
+            size,
+            size
+        );
+
+    }
+
+
+    ctx.shadowBlur = 0;
+
+
+    // Neon grid
+
+    ctx.strokeStyle =
+        "#25105c";
+
+    ctx.lineWidth = 1;
+
+
+    for (
+        let x = 0;
+        x < canvas.width;
+        x += 35
+    ) {
+
+        ctx.beginPath();
+
+        ctx.moveTo(x, 0);
+
+        ctx.lineTo(
+            x,
+            canvas.height
+        );
+
+        ctx.stroke();
+
+    }
+
+
+    for (
+        let y = 0;
+        y < canvas.height;
+        y += 35
+    ) {
+
+        ctx.beginPath();
+
+        ctx.moveTo(0, y);
+
+        ctx.lineTo(
+            canvas.width,
+            y
+        );
+
+        ctx.stroke();
+
+    }
+
+}
+
+
+// ---------------------------
+// PLAYER
+// ---------------------------
+
+function drawPlayer() {
+
+    const x =
+        Math.floor(player.x);
+
+    const y =
+        Math.floor(player.y);
+
+
+    ctx.shadowColor =
+        "#00ffff";
+
+    ctx.shadowBlur = 25;
+
+
+    // Ship
+
+    ctx.fillStyle =
+        "#00ffff";
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x + 35,
+        y
+    );
+
+    ctx.lineTo(
+        x + 70,
+        y + 35
+    );
+
+    ctx.lineTo(
+        x,
+        y + 35
+    );
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    ctx.shadowBlur = 0;
+
+
+    // Pink cockpit
+
+    ctx.fillStyle =
+        "#ff00ff";
+
+    ctx.fillRect(
+        x + 27,
+        y + 14,
+        16,
+        11
+    );
+
+
+    // Engines
+
+    ctx.fillStyle =
+        "#ffff00";
+
+
+    ctx.shadowColor =
+        "#ffff00";
+
+    ctx.shadowBlur = 15;
+
+
+    ctx.fillRect(
+        x + 14,
+        y + 35,
+        12,
+        10
+    );
+
+    ctx.fillRect(
+        x + 44,
+        y + 35,
+        12,
+        10
+    );
+
+
+    ctx.shadowBlur = 0;
+
+}
+
+
+// ---------------------------
+// STAR
+// ---------------------------
+
+function drawStar(obj) {
+
+    ctx.save();
+
+
+    ctx.translate(
+        obj.x +
+        obj.size / 2,
+
+        obj.y +
+        obj.size / 2
+    );
+
+
+    ctx.rotate(
+        obj.rotation
+    );
+
+
+    ctx.shadowColor =
+        "#ffff00";
+
+    ctx.shadowBlur = 25;
+
+
+    ctx.fillStyle =
+        "#ffff00";
+
+
+    ctx.beginPath();
+
+
+    for (
+        let i = 0;
+        i < 10;
+        i++
+    ) {
+
+        const angle =
+            -Math.PI / 2 +
+            i * Math.PI / 5;
+
+        const radius =
+            i % 2 === 0
+                ? obj.size / 2
+                : obj.size / 4;
+
+
+        const x =
+            Math.cos(angle) *
+            radius;
+
+        const y =
+            Math.sin(angle) *
+            radius;
+
+
+        if (i === 0)
+            ctx.moveTo(x, y);
+        else
+            ctx.lineTo(x, y);
+
+    }
+
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.restore();
+
+}
+
+
+// ---------------------------
+// BOMB
+// ---------------------------
+
+function drawBomb(obj) {
+
+    ctx.save();
+
+
+    ctx.translate(
+        obj.x +
+        obj.size / 2,
+
+        obj.y +
+        obj.size / 2
+    );
+
+
+    ctx.shadowColor =
+        "#ff0055";
+
+    ctx.shadowBlur = 25;
+
+
+    ctx.fillStyle =
+        "#ff0055";
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,
+        0,
+        obj.size / 2,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // Fuse
+
+    ctx.strokeStyle =
+        "#ffff00";
+
+    ctx.lineWidth = 4;
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        7,
+        -10
+    );
+
+    ctx.lineTo(
+        16,
+        -19
+    );
+
+    ctx.stroke();
+
+
+    ctx.restore();
+
+}
+
+
+// ---------------------------
+// OBJECTS
+// ---------------------------
+
+function drawObjects() {
+
+    objects.forEach(obj => {
+
+        if (
+            obj.type === "star"
+        ) {
+
+            drawStar(obj);
+
+        } else {
+
+            drawBomb(obj);
+
+        }
+
+    });
+
+}
+
+
+// ---------------------------
+// HUD
+// ---------------------------
+
+function drawHUD() {
+
+    ctx.font =
+        "bold 22px Courier New";
+
+
+    // SCORE
+
+    ctx.fillStyle =
+        "#ffffff";
+
+    ctx.shadowColor =
+        "#00ffff";
+
+    ctx.shadowBlur = 12;
+
+
+    ctx.fillText(
+        "POINTS: " + score,
+        20,
+        35
+    );
+
+
+    // HIGH SCORE
+
+    ctx.fillStyle =
+        "#ffff00";
+
+    ctx.shadowColor =
+        "#ffff00";
+
+
+    ctx.fillText(
+        "HIGH: " + highScore,
+        275,
+        35
+    );
+
+
+    // LIVES
+
+    ctx.fillStyle =
+        "#ff00ff";
+
+    ctx.shadowColor =
+        "#ff00ff";
+
+
+    ctx.fillText(
+        "♥".repeat(lives),
+        580,
+        35
+    );
+
+
+    ctx.shadowBlur = 0;
+
+}
+
+
+// ---------------------------
+// START SCREEN
+// ---------------------------
+
+function drawStartScreen() {
+
+    ctx.fillStyle =
+        "rgba(5,0,26,0.88)";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    ctx.textAlign =
+        "center";
+
+
+    ctx.shadowColor =
+        "#00ffff";
+
+    ctx.shadowBlur = 25;
+
+
+    ctx.fillStyle =
+        "#00ffff";
+
+    ctx.font =
+        "bold 48px Courier New";
+
+
+    ctx.fillText(
+        "STAR CATCHER",
+        canvas.width / 2,
+        220
+    );
+
+
+    ctx.shadowBlur = 0;
+
+
+    ctx.fillStyle =
+        "#ffff00";
+
+    ctx.font =
+        "bold 22px Courier New";
+
+
+    ctx.fillText(
+        "★ CATCH STARS = +10 ★",
+        canvas.width / 2,
+        275
+    );
+
+
+    ctx.fillStyle =
+        "#ff0055";
+
+
+    ctx.fillText(
+        "● AVOID BOMBS ●",
+        canvas.width / 2,
+        315
+    );
+
+
+    ctx.fillStyle =
+        "#ff00ff";
+
+    ctx.font =
+        "bold 18px Courier New";
+
+
+    ctx.fillText(
+        "PRESS SPACE TO START",
+        canvas.width / 2,
+        375
+    );
+
+
+    ctx.textAlign =
+        "left";
+
+}
+
+
+// ---------------------------
+// GAME OVER
+// ---------------------------
+
+function drawGameOver() {
+
+    ctx.fillStyle =
+        "rgba(5,0,26,0.90)";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    ctx.textAlign =
+        "center";
+
+
+    ctx.fillStyle =
+        "#ff0055";
+
+    ctx.shadowColor =
+        "#ff0055";
+
+    ctx.shadowBlur = 25;
+
+
+    ctx.font =
+        "bold 52px Courier New";
+
+
+    ctx.fillText(
+        "GAME OVER",
+        canvas.width / 2,
+        220
+    );
+
+
+    ctx.shadowBlur = 0;
+
+
+    ctx.fillStyle =
+        "#ffffff";
+
+    ctx.font =
+        "bold 25px Courier New";
+
+
+    ctx.fillText(
+        "POINTS: " + score,
+        canvas.width / 2,
+        280
+    );
+
+
+    ctx.fillStyle =
+        "#ffff00";
+
+
+    ctx.fillText(
+        "HIGH SCORE: " + highScore,
+        canvas.width / 2,
+        320
+    );
+
+
+    ctx.fillStyle =
+        "#00ffff";
+
+    ctx.font =
+        "bold 18px Courier New";
+
+
+    ctx.fillText(
+        "PRESS SPACE TO PLAY AGAIN",
+        canvas.width / 2,
+        380
+    );
+
+
+    ctx.textAlign =
+        "left";
+
+}
+
+
+// ---------------------------
+// RESTART
+// ---------------------------
+
+function restartGame() {
+
+    score = 0;
+
+    lives = 3;
+
+    difficulty = 1;
+
+    objects = [];
+
+    particles = [];
+
+    floatingPoints = [];
+
+
+    player.x =
+        canvas.width / 2 - 35;
+
+
+    spawnTimer = 30;
+
+
+    gameOver = false;
+
+    gameRunning = true;
+
+}
+
+
+// ---------------------------
+// GAME LOOP
+// ---------------------------
+
+function gameLoop() {
+
+    update();
+
+    drawBackground();
+
+    drawObjects();
+
+    drawPlayer();
+
+    drawParticles();
+
+    drawFloatingPoints();
+
+    drawHUD();
+
+
+    if (
+        !gameRunning &&
+        !gameOver
+    ) {
+
+        drawStartScreen();
+
+    }
+
+
+    if (gameOver) {
+
+        drawGameOver();
+
+    }
+
+
+    requestAnimationFrame(
+        gameLoop
+    );
+
+}
+
+
+gameLoop();
+
+</script>
+
+</body>
+</html>
